@@ -171,6 +171,30 @@
         return m === 0 ? `in ${h}h` : `in ${h}h ${m}m`;
       }
 
+      // A meeting is "Hybrid" when it has both a physical address and an online conference,
+      // "Online" when conference-only, otherwise "In-person".
+      function attendanceOf(m) {
+        const hasOnline = !!(m.online || m.conferenceUrl);
+        const hasPhysical = !!(m.address && !/^online$/i.test(m.address));
+        if (hasOnline && hasPhysical) return "Hybrid";
+        if (hasOnline) return "Online";
+        return "In-person";
+      }
+
+      // Time-of-day buckets in local minutes. Night wraps midnight.
+      function timeBucket(mins) {
+        if (mins == null) return null;
+        if (mins >= 300 && mins < 480) return "Early";       // 5:00–7:59
+        if (mins >= 480 && mins < 720) return "Morning";     // 8:00–11:59
+        if (mins >= 720 && mins < 1020) return "Afternoon";  // 12:00–16:59
+        if (mins >= 1020 && mins < 1260) return "Evening";   // 17:00–20:59
+        return "Night";                                       // 21:00–4:59
+      }
+
+      const TYPE_CHIPS = ["Open","Closed","Beginners","Women","Men","Big Book","Step Study","Speaker","Discussion","LGBTQ","Young People"];
+      const ATTENDANCE_OPTIONS = ["All","In-person","Online","Hybrid"];
+      const TIME_OPTIONS = ["Any","Early","Morning","Afternoon","Evening","Night"];
+
       // ---------- TSML normalization ----------
       // Sample TSML fields: name, slug, day (0-6 Sun..Sat), time "19:00", end_time, types, notes,
       // location, formatted_address, latitude, longitude, region, sub_region
@@ -364,10 +388,38 @@
         const [query, setQuery] = useState("");
         const [userPos, setUserPos] = useState(() => lsGet("userPos", null));
         const [geoStatus, setGeoStatus] = useState("idle"); // idle | requesting | denied | error
+        const [attendance, setAttendance] = useState(() => lsGet("attendance", "All"));
+        const [timeOfDay, setTimeOfDay] = useState(() => lsGet("timeOfDay", "Any"));
+        const [typeFilters, setTypeFilters] = useState(() => lsGet("typeFilters", []));
+        const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
 
         useEffect(() => { lsSet("distance", distance === Infinity ? null : distance); }, [distance]);
         useEffect(() => { lsSet("program", program); }, [program]);
         useEffect(() => { lsSet("userPos", userPos); }, [userPos]);
+        useEffect(() => { lsSet("attendance", attendance); }, [attendance]);
+        useEffect(() => { lsSet("timeOfDay", timeOfDay); }, [timeOfDay]);
+        useEffect(() => { lsSet("typeFilters", typeFilters); }, [typeFilters]);
+
+        const toggleType = useCallback((t) => {
+          setTypeFilters((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]);
+        }, []);
+
+        const activeFilterCount =
+          (program !== "All" ? 1 : 0) +
+          (distance !== Infinity ? 1 : 0) +
+          (attendance !== "All" ? 1 : 0) +
+          (timeOfDay !== "Any" ? 1 : 0) +
+          typeFilters.length +
+          (query.trim() ? 1 : 0);
+
+        const clearAllFilters = useCallback(() => {
+          setProgram("All");
+          setDistance(Infinity);
+          setAttendance("All");
+          setTimeOfDay("Any");
+          setTypeFilters([]);
+          setQuery("");
+        }, []);
 
         const origin = userPos || TRENTON;
 
@@ -438,6 +490,15 @@
           let list = meetingsWithDistance.filter((m) => m.day === selectedDay);
           if (program !== "All") list = list.filter((m) => m.program === program);
           if (distance !== Infinity) list = list.filter((m) => m.distance == null || m.distance <= distance);
+          if (attendance !== "All") list = list.filter((m) => attendanceOf(m) === attendance);
+          if (timeOfDay !== "Any") list = list.filter((m) => timeBucket(parseTimeToMinutes(m.time)) === timeOfDay);
+          if (typeFilters.length) {
+            const wanted = typeFilters.map((t) => t.toLowerCase());
+            list = list.filter((m) => {
+              const have = (m.types || []).map((t) => String(t).toLowerCase());
+              return wanted.every((w) => have.some((h) => h.includes(w)));
+            });
+          }
           if (query.trim()) {
             const q = query.trim().toLowerCase();
             list = list.filter((m) =>
@@ -454,7 +515,7 @@
             return da - db;
           });
           return list;
-        }, [meetingsWithDistance, selectedDay, program, distance, query]);
+        }, [meetingsWithDistance, selectedDay, program, distance, attendance, timeOfDay, typeFilters, query]);
 
         // Should we show SMART/NA fallback cards in the list?
         const showSmartFallback = (program === "All" || program === "SMART");
@@ -521,41 +582,104 @@
                   />
                 </div>
 
-                {/* Filters row */}
-                <div className="mt-3 flex items-center gap-2 overflow-x-auto scroll-x -mx-4 px-4 pb-1">
-                  <div className="flex gap-1 bg-ink-800 border border-ink-700 rounded-lg p-1">
-                    {["All","AA","NA","SMART"].map((p) => (
-                      <button key={p} onClick={() => setProgram(p)}
-                        className={`px-2.5 py-1 rounded-md text-xs font-medium ${program === p ? "bg-white text-ink-950" : "text-ink-300"}`}>
-                        {p}
-                      </button>
-                    ))}
+                {/* Filters */}
+                <div className="mt-3 space-y-2">
+                  {/* Row 1: Program */}
+                  <div className="flex items-center gap-2 overflow-x-auto scroll-x -mx-4 px-4 pb-1">
+                    <span className="text-[10px] uppercase tracking-wider text-ink-400 shrink-0">Program</span>
+                    <div className="flex gap-1 bg-ink-800 border border-ink-700 rounded-lg p-1 shrink-0">
+                      {["All","AA","NA","SMART"].map((p) => (
+                        <button key={p} onClick={() => setProgram(p)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium ${program === p ? "bg-white text-ink-950" : "text-ink-300"}`}>
+                          {p}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex gap-1 bg-ink-800 border border-ink-700 rounded-lg p-1">
-                    {[5,10,20,Infinity].map((d) => (
-                      <button key={String(d)} onClick={() => setDistance(d)}
-                        className={`px-2.5 py-1 rounded-md text-xs font-medium ${distance === d ? "bg-white text-ink-950" : "text-ink-300"}`}>
-                        {d === Infinity ? "Any" : `${d} mi`}
+
+                  {/* Row 2: Distance + Location */}
+                  <div className="flex items-center gap-2 overflow-x-auto scroll-x -mx-4 px-4 pb-1">
+                    <span className="text-[10px] uppercase tracking-wider text-ink-400 shrink-0">Distance</span>
+                    <div className="flex gap-1 bg-ink-800 border border-ink-700 rounded-lg p-1 shrink-0">
+                      {[5,10,20,Infinity].map((d) => (
+                        <button key={String(d)} onClick={() => setDistance(d)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium ${distance === d ? "bg-white text-ink-950" : "text-ink-300"}`}>
+                          {d === Infinity ? "Any" : `${d} mi`}
+                        </button>
+                      ))}
+                    </div>
+                    {userPos ? (
+                      <button onClick={clearLocation}
+                        className="shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-aa-600/30 text-aa-500 ring-1 ring-aa-600/40">
+                        <IconPin className="inline mr-1" /> Using my location · clear
                       </button>
-                    ))}
+                    ) : (
+                      <button onClick={requestLocation} disabled={geoStatus === "requesting"}
+                        className="shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-ink-800 border border-ink-700 text-ink-300 hover:text-white disabled:opacity-60">
+                        <IconPin className="inline mr-1" />
+                        {geoStatus === "requesting" ? "Locating…"
+                          : geoStatus === "denied" ? "Location blocked"
+                          : geoStatus === "error" ? "Location failed"
+                          : "Use my location"}
+                      </button>
+                    )}
                   </div>
-                  {userPos ? (
-                    <button onClick={clearLocation}
-                      className="shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-aa-600/30 text-aa-500 ring-1 ring-aa-600/40"
-                      title="Stop using my location">
-                      <IconPin className="inline mr-1" /> Using my location · clear
-                    </button>
-                  ) : (
-                    <button onClick={requestLocation} disabled={geoStatus === "requesting"}
-                      className="shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-ink-800 border border-ink-700 text-ink-300 hover:text-white disabled:opacity-60"
-                      title="Recalculate distances from your actual position">
-                      <IconPin className="inline mr-1" />
-                      {geoStatus === "requesting" ? "Locating…"
-                        : geoStatus === "denied" ? "Location blocked"
-                        : geoStatus === "error" ? "Location failed"
-                        : "Use my location"}
-                    </button>
+
+                  {/* Row 3: Attendance mode */}
+                  <div className="flex items-center gap-2 overflow-x-auto scroll-x -mx-4 px-4 pb-1">
+                    <span className="text-[10px] uppercase tracking-wider text-ink-400 shrink-0">Mode</span>
+                    <div className="flex gap-1 bg-ink-800 border border-ink-700 rounded-lg p-1 shrink-0">
+                      {ATTENDANCE_OPTIONS.map((a) => (
+                        <button key={a} onClick={() => setAttendance(a)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium ${attendance === a ? "bg-white text-ink-950" : "text-ink-300"}`}>
+                          {a}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Row 4: Time of day */}
+                  <div className="flex items-center gap-2 overflow-x-auto scroll-x -mx-4 px-4 pb-1">
+                    <span className="text-[10px] uppercase tracking-wider text-ink-400 shrink-0">Time</span>
+                    <div className="flex gap-1 bg-ink-800 border border-ink-700 rounded-lg p-1 shrink-0">
+                      {TIME_OPTIONS.map((t) => (
+                        <button key={t} onClick={() => setTimeOfDay(t)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium ${timeOfDay === t ? "bg-white text-ink-950" : "text-ink-300"}`}>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Row 5: Types (collapsible) */}
+                  {moreFiltersOpen && (
+                    <div className="flex items-start gap-2 -mx-4 px-4 pb-1">
+                      <span className="text-[10px] uppercase tracking-wider text-ink-400 shrink-0 mt-1.5">Type</span>
+                      <div className="flex gap-1 flex-wrap">
+                        {TYPE_CHIPS.map((t) => {
+                          const on = typeFilters.includes(t);
+                          return (
+                            <button key={t} onClick={() => toggleType(t)}
+                              className={`px-2.5 py-1 rounded-md text-xs font-medium border ${on ? "bg-white text-ink-950 border-white" : "bg-ink-800 text-ink-300 border-ink-700"}`}>
+                              {t}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
+
+                  {/* Toggle + Clear-all row */}
+                  <div className="flex items-center justify-between text-[11px] -mx-4 px-4">
+                    <button onClick={() => setMoreFiltersOpen((v) => !v)} className="text-ink-300 hover:text-white">
+                      {moreFiltersOpen ? "Hide type filters" : `More filters${typeFilters.length ? ` · ${typeFilters.length}` : ""}`}
+                    </button>
+                    {activeFilterCount > 0 && (
+                      <button onClick={clearAllFilters} className="text-aa-500 hover:text-white">
+                        Clear all · {activeFilterCount}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </header>
