@@ -356,41 +356,59 @@
         });
         const [program, setProgram] = useState(() => lsGet("program", "All"));
         const [query, setQuery] = useState("");
+        const [userPos, setUserPos] = useState(() => lsGet("userPos", null));
+        const [geoStatus, setGeoStatus] = useState("idle"); // idle | requesting | denied | error
 
         useEffect(() => { lsSet("distance", distance === Infinity ? null : distance); }, [distance]);
         useEffect(() => { lsSet("program", program); }, [program]);
+        useEffect(() => { lsSet("userPos", userPos); }, [userPos]);
 
-        // Fetch AA feed once
+        const origin = userPos || TRENTON;
+
+        const requestLocation = useCallback(() => {
+          if (!("geolocation" in navigator)) { setGeoStatus("error"); return; }
+          setGeoStatus("requesting");
+          navigator.geolocation.getCurrentPosition(
+            (p) => { setUserPos({ lat: p.coords.latitude, lng: p.coords.longitude }); setGeoStatus("idle"); },
+            (err) => { setGeoStatus(err.code === err.PERMISSION_DENIED ? "denied" : "error"); },
+            { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 }
+          );
+        }, []);
+
+        const clearLocation = useCallback(() => { setUserPos(null); setGeoStatus("idle"); }, []);
+
+        // Fetch AA feed once (distances are computed reactively below)
         useEffect(() => {
           let cancelled = false;
           (async () => {
             const { ok, data, source } = await fetchAAFeed();
             if (cancelled) return;
             if (!ok) { setFeedStatus({ aa: "error", source: null }); return; }
-            const norm = normalizeTSML(data);
-            const withDist = norm.map((m) => ({
-              ...m,
-              distance: m.lat != null && m.lng != null ? haversine(TRENTON, { lat: m.lat, lng: m.lng }) : null,
-            }));
-            setMeetings(withDist);
+            setMeetings(normalizeTSML(data));
             setFeedStatus({ aa: "ok", source });
           })();
           return () => { cancelled = true; };
         }, []);
+
+        // Re-annotate distances whenever origin (user-set or default) changes
+        const meetingsWithDistance = useMemo(() => meetings.map((m) => ({
+          ...m,
+          distance: m.lat != null && m.lng != null ? haversine(origin, { lat: m.lat, lng: m.lng }) : null,
+        })), [meetings, origin]);
 
         // Today's "in next 3 hours" badge count
         const nextThreeHoursCount = useMemo(() => {
           const today = todayJsDay();
           const nowMin = minutesIntoToday();
           const horizon = nowMin + 180;
-          return meetings.filter((m) =>
+          return meetingsWithDistance.filter((m) =>
             m.day === today &&
             (() => {
               const t = parseTimeToMinutes(m.time);
               return t != null && t >= nowMin && t <= horizon;
             })()
           ).length;
-        }, [meetings]);
+        }, [meetingsWithDistance]);
 
         // Soonest upcoming meeting today (within next 4 hours, distance-eligible)
         const nextUp = useMemo(() => {
@@ -398,7 +416,7 @@
           if (selectedDay !== today) return null;
           const nowMin = minutesIntoToday();
           const horizon = nowMin + 240;
-          const candidates = meetings
+          const candidates = meetingsWithDistance
             .filter((m) => m.day === today)
             .filter((m) => distance === Infinity || m.distance == null || m.distance <= distance)
             .map((m) => ({ m, t: parseTimeToMinutes(m.time) }))
@@ -407,11 +425,11 @@
           if (!candidates.length) return null;
           const { m, t } = candidates[0];
           return { meeting: m, minsUntil: t - nowMin };
-        }, [meetings, selectedDay, distance]);
+        }, [meetingsWithDistance, selectedDay, distance]);
 
         // Filter pipeline
         const filtered = useMemo(() => {
-          let list = meetings.filter((m) => m.day === selectedDay);
+          let list = meetingsWithDistance.filter((m) => m.day === selectedDay);
           if (program !== "All") list = list.filter((m) => m.program === program);
           if (distance !== Infinity) list = list.filter((m) => m.distance == null || m.distance <= distance);
           if (query.trim()) {
@@ -430,7 +448,7 @@
             return da - db;
           });
           return list;
-        }, [meetings, selectedDay, program, distance, query]);
+        }, [meetingsWithDistance, selectedDay, program, distance, query]);
 
         // Should we show SMART/NA fallback cards in the list?
         const showSmartFallback = (program === "All" || program === "SMART");
@@ -449,7 +467,9 @@
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-[11px] uppercase tracking-wider text-ink-400">Recovery near you</div>
-                    <h1 className="text-lg font-semibold text-white">Trenton, MI · 48183</h1>
+                    <h1 className="text-lg font-semibold text-white">
+                      {userPos ? "Your location" : "Trenton, MI · 48183"}
+                    </h1>
                   </div>
                   <div className="relative">
                     <button
@@ -513,6 +533,23 @@
                       </button>
                     ))}
                   </div>
+                  {userPos ? (
+                    <button onClick={clearLocation}
+                      className="shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-aa-600/30 text-aa-500 ring-1 ring-aa-600/40"
+                      title="Stop using my location">
+                      <IconPin className="inline mr-1" /> Using my location · clear
+                    </button>
+                  ) : (
+                    <button onClick={requestLocation} disabled={geoStatus === "requesting"}
+                      className="shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-ink-800 border border-ink-700 text-ink-300 hover:text-white disabled:opacity-60"
+                      title="Recalculate distances from your actual position">
+                      <IconPin className="inline mr-1" />
+                      {geoStatus === "requesting" ? "Locating…"
+                        : geoStatus === "denied" ? "Location blocked"
+                        : geoStatus === "error" ? "Location failed"
+                        : "Use my location"}
+                    </button>
+                  )}
                 </div>
               </div>
             </header>
