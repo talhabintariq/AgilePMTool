@@ -1,0 +1,15 @@
+{
+  "name": "Recovery Meetings — Trenton, MI",
+  "short_name": "Recovery",
+  "description": "Find AA, NA, SMART, Dharma, and other recovery meetings near you.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070b14",
+  "theme_color": "#0b1220",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "categories": ["health", "lifestyle", "social"]
+}
