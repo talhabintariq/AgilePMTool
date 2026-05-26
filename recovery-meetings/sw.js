@@ -2,7 +2,7 @@
 // opens offline and renders instantly. Network-first for the live feed
 // (so users always get fresh meetings when online), cache-first for
 // vendored assets that don't change between deploys.
-const CACHE = "recovery-v1";
+const CACHE = "recovery-v2";
 const SHELL = [
   "./",
   "./index.html",
@@ -34,11 +34,16 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
 
-  // Network-first for the live AA feed and CORS proxies — always try fresh.
-  const isLiveFeed = /aaferndale\.org|corsproxy\.io|allorigins\.win/.test(url.hostname);
+  // Network-first for live AA intergroup feeds — always try fresh, fall back to the
+  // bundled SE Michigan snapshot only if the request was for that feed.
+  const isLiveFeed = /aaferndale\.org|aacincinnati\.org|nyintergroup\.org|aaphoenix\.org|aahouston\.org|aaminneapolis\.org/.test(url.hostname);
   if (isLiveFeed) {
     event.respondWith(
-      fetch(request).catch(() => caches.match("./data/aa-feed-snapshot.json"))
+      fetch(request).catch(() =>
+        /aaferndale\.org/.test(url.hostname)
+          ? caches.match("./data/aa-feed-snapshot.json")
+          : new Response("[]", { headers: { "Content-Type": "application/json" } })
+      )
     );
     return;
   }
