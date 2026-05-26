@@ -78,7 +78,9 @@
       // TSML day mapping: 0=Sunday ... 6=Saturday (matches JS Date.getDay())
       const TSML_DAY_TO_JS = (d) => Number(d);
 
-      const AA_FEED = "https://aaferndale.org/meetings/?tsml-output=json";
+      // TSML JSON endpoint (CORS-enabled). The legacy ?tsml-output=json route now returns HTML.
+      const AA_FEED = "https://aaferndale.org/wp-admin/admin-ajax.php?action=meetings";
+      const AA_FEED_SNAPSHOT = "data/aa-feed-snapshot.json";
       const SMART_DEEPLINK = `https://meetings.smartrecovery.org/meetings/?distance_units=miles&distance=20&location=${TRENTON.zip}`;
       const NA_DEEPLINK = `https://www.na.org/meetingsearch/`;
       const PASSENGER_LINK = "https://passengerrecovery.com/compass";
@@ -176,23 +178,24 @@
       }
 
       // ---------- Data fetch ----------
+      // Try the live CORS-enabled endpoint, then proxy fallbacks, then a bundled snapshot.
       async function fetchAAFeed() {
         const tries = [
-          AA_FEED,
-          // CORS-proxy fallbacks (best-effort; some are rate-limited)
-          `https://corsproxy.io/?${encodeURIComponent(AA_FEED)}`,
-          `https://api.allorigins.win/raw?url=${encodeURIComponent(AA_FEED)}`,
+          { url: AA_FEED, source: "live" },
+          { url: `https://corsproxy.io/?${encodeURIComponent(AA_FEED)}`, source: "proxy:corsproxy" },
+          { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(AA_FEED)}`, source: "proxy:allorigins" },
+          { url: AA_FEED_SNAPSHOT, source: "snapshot" },
         ];
-        for (const url of tries) {
+        for (const { url, source } of tries) {
           try {
             const r = await fetch(url, { headers: { "Accept": "application/json" } });
             if (!r.ok) continue;
             const data = await r.json();
-            if (Array.isArray(data) && data.length) return { ok: true, data };
-            if (Array.isArray(data?.meetings)) return { ok: true, data: data.meetings };
+            if (Array.isArray(data) && data.length) return { ok: true, data, source };
+            if (Array.isArray(data?.meetings)) return { ok: true, data: data.meetings, source };
           } catch {}
         }
-        return { ok: false, data: [] };
+        return { ok: false, data: [], source: null };
       }
 
       // ---------- UI atoms ----------
@@ -337,17 +340,16 @@
         useEffect(() => {
           let cancelled = false;
           (async () => {
-            const { ok, data } = await fetchAAFeed();
+            const { ok, data, source } = await fetchAAFeed();
             if (cancelled) return;
-            if (!ok) { setFeedStatus({ aa: "error" }); return; }
+            if (!ok) { setFeedStatus({ aa: "error", source: null }); return; }
             const norm = normalizeTSML(data);
-            // Annotate with distance from Trenton
             const withDist = norm.map((m) => ({
               ...m,
               distance: m.lat != null && m.lng != null ? haversine(TRENTON, { lat: m.lat, lng: m.lng }) : null,
             }));
             setMeetings(withDist);
-            setFeedStatus({ aa: "ok" });
+            setFeedStatus({ aa: "ok", source });
           })();
           return () => { cancelled = true; };
         }, []);
@@ -481,6 +483,9 @@
                   {DAY_FULL[selectedDay]} · {filtered.length} meeting{filtered.length === 1 ? "" : "s"}
                 </h2>
                 {feedStatus.aa === "loading" && <span className="text-[11px] text-ink-400">Loading AA feed…</span>}
+                {feedStatus.aa === "ok" && feedStatus.source && feedStatus.source !== "live" && (
+                  <span className="text-[11px] text-smart-500" title={`Loaded via ${feedStatus.source}`}>via {feedStatus.source}</span>
+                )}
                 {feedStatus.aa === "error" && <span className="text-[11px] text-rose-400">AA feed unavailable</span>}
               </div>
 
