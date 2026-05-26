@@ -6,23 +6,28 @@
     <meta name="theme-color" content="#0b1220" />
     <title>Recovery Meetings · Trenton, MI (48183)</title>
     <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='20' font-size='20'>🫶</text></svg>" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vendored Tailwind (prebuilt). Falls through to CDN if vendor/ is absent. -->
+    <link rel="stylesheet" href="vendor/tailwind.css" />
     <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              aa: { 500: "#3b82f6", 600: "#2563eb", 900: "#0b2447" },
-              na: { 500: "#10b981", 600: "#059669", 900: "#073b2e" },
-              smart: { 500: "#f59e0b", 600: "#d97706", 900: "#3a2406" },
-              ink: { 950: "#070b14", 900: "#0b1220", 800: "#111a2c", 700: "#1b263f", 600: "#2a3654", 500: "#475085", 400: "#7d86ad", 300: "#c8cfe8" },
-            },
-            fontFamily: {
-              sans: ['system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
-            },
-          },
-        },
-      };
+      // If the vendored stylesheet failed to load, fall back to the Tailwind JIT CDN.
+      (function () {
+        var hasTW = false;
+        for (var i = 0; i < document.styleSheets.length; i++) {
+          try { if ((document.styleSheets[i].href || "").indexOf("vendor/tailwind.css") !== -1 && document.styleSheets[i].cssRules) { hasTW = true; break; } } catch (e) {}
+        }
+        if (!hasTW) {
+          window.tailwind = window.tailwind || {};
+          window.tailwind.config = { theme: { extend: { colors: {
+            aa:    { 500: "#3b82f6", 600: "#2563eb", 900: "#0b2447" },
+            na:    { 500: "#10b981", 600: "#059669", 900: "#073b2e" },
+            smart: { 500: "#f59e0b", 600: "#d97706", 900: "#3a2406" },
+            ink:   { 950: "#070b14", 900: "#0b1220", 800: "#111a2c", 700: "#1b263f", 600: "#2a3654", 500: "#475085", 400: "#7d86ad", 300: "#c8cfe8" },
+          } } } };
+          var s = document.createElement("script");
+          s.src = "https://cdn.tailwindcss.com";
+          document.head.appendChild(s);
+        }
+      })();
     </script>
     <style>
       html, body, #root { height: 100%; }
@@ -33,9 +38,32 @@
       .pulse-dot::after { content:""; position:absolute; top:-2px; right:-2px; width:8px; height:8px; border-radius:9999px; background:#f59e0b; box-shadow:0 0 0 0 rgba(245,158,11,.7); animation:pulse 1.8s infinite; }
       @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(245,158,11,.7)} 70%{box-shadow:0 0 0 10px rgba(245,158,11,0)} 100%{box-shadow:0 0 0 0 rgba(245,158,11,0)} }
     </style>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Vendored React + Babel, with CDN fallback if vendor/ is missing. -->
+    <script>
+      (function () {
+        function load(src, cb) {
+          var s = document.createElement("script");
+          s.src = src; s.async = false;
+          s.onload = function () { cb && cb(true); };
+          s.onerror = function () { cb && cb(false); };
+          document.head.appendChild(s);
+        }
+        function chain(local, cdn, done) {
+          load(local, function (ok) { ok ? done() : load(cdn, function () { done(); }); });
+        }
+        chain("vendor/react.min.js", "https://unpkg.com/react@18/umd/react.production.min.js", function () {
+          chain("vendor/react-dom.min.js", "https://unpkg.com/react-dom@18/umd/react-dom.production.min.js", function () {
+            chain("vendor/babel.min.js", "https://unpkg.com/@babel/standalone/babel.min.js", function () {
+              // Babel Standalone only auto-scans on DOMContentLoaded; if we're late, kick it.
+              if (window.Babel && typeof window.Babel.transformScriptTags === "function") {
+                try { window.Babel.transformScriptTags(); } catch (e) { console.error(e); }
+              }
+              window.__VENDORED_READY__ = true;
+            });
+          });
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
