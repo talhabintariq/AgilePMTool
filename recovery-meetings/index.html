@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1220" />
+    <title>Recovery Meetings · Trenton, MI (48183)</title>
+    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='20' font-size='20'>🫶</text></svg>" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              aa: { 500: "#3b82f6", 600: "#2563eb", 900: "#0b2447" },
+              na: { 500: "#10b981", 600: "#059669", 900: "#073b2e" },
+              smart: { 500: "#f59e0b", 600: "#d97706", 900: "#3a2406" },
+              ink: { 950: "#070b14", 900: "#0b1220", 800: "#111a2c", 700: "#1b263f", 600: "#2a3654", 500: "#475085", 400: "#7d86ad", 300: "#c8cfe8" },
+            },
+            fontFamily: {
+              sans: ['system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      html, body, #root { height: 100%; }
+      body { background: #070b14; color: #e6e9f5; -webkit-tap-highlight-color: transparent; }
+      .scroll-x { scrollbar-width: none; }
+      .scroll-x::-webkit-scrollbar { display: none; }
+      .glass { backdrop-filter: blur(8px); background: rgba(11,18,32,.78); }
+      .pulse-dot::after { content:""; position:absolute; top:-2px; right:-2px; width:8px; height:8px; border-radius:9999px; background:#f59e0b; box-shadow:0 0 0 0 rgba(245,158,11,.7); animation:pulse 1.8s infinite; }
+      @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(245,158,11,.7)} 70%{box-shadow:0 0 0 10px rgba(245,158,11,0)} 100%{box-shadow:0 0 0 0 rgba(245,158,11,0)} }
+    </style>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="react" data-type="module">
+      const { useEffect, useMemo, useState, useCallback, useRef } = React;
+
+      // ---------- Constants ----------
+      const TRENTON = { lat: 42.1211, lng: -83.2103, zip: "48183", city: "Trenton, MI" };
+      const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const DAY_FULL = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+      // TSML day mapping: 0=Sunday ... 6=Saturday (matches JS Date.getDay())
+      const TSML_DAY_TO_JS = (d) => Number(d);
+
+      const AA_FEED = "https://aaferndale.org/meetings/?tsml-output=json";
+      const SMART_DEEPLINK = `https://meetings.smartrecovery.org/meetings/?distance_units=miles&distance=20&location=${TRENTON.zip}`;
+      const NA_DEEPLINK = `https://www.na.org/meetingsearch/`;
+      const PASSENGER_LINK = "https://passengerrecovery.com/compass";
+      const NEWFORM_LINK = "https://newform.org";
+
+      // ---------- Helpers ----------
+      const toRad = (n) => (n * Math.PI) / 180;
+      function haversine(a, b) {
+        if (!a || !b || a.lat == null || a.lng == null || b.lat == null || b.lng == null) return null;
+        const R = 3958.8; // miles
+        const dLat = toRad(b.lat - a.lat);
+        const dLng = toRad(b.lng - a.lng);
+        const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
+        return 2 * R * Math.asin(Math.sqrt(s));
+      }
+
+      function parseTimeToMinutes(t) {
+        if (!t) return null;
+        const m = /^(\d{1,2}):(\d{2})/.exec(String(t).trim());
+        if (!m) return null;
+        return Number(m[1]) * 60 + Number(m[2]);
+      }
+
+      function fmtTime(t) {
+        const mins = parseTimeToMinutes(t);
+        if (mins == null) return t || "";
+        let h = Math.floor(mins / 60);
+        const m = mins % 60;
+        const ap = h >= 12 ? "PM" : "AM";
+        h = h % 12;
+        if (h === 0) h = 12;
+        return `${h}:${m.toString().padStart(2,"0")} ${ap}`;
+      }
+
+      function isAppleDevice() {
+        const ua = navigator.userAgent || "";
+        return /iPhone|iPad|iPod|Macintosh/.test(ua);
+      }
+
+      function mapsUrl(addr, lat, lng) {
+        const q = lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(addr || "");
+        if (isAppleDevice()) return `https://maps.apple.com/?daddr=${q}`;
+        return `https://www.google.com/maps/dir/?api=1&destination=${q}`;
+      }
+
+      async function copyText(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch {
+          // Fallback
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand("copy"); } catch {}
+          document.body.removeChild(ta);
+          return true;
+        }
+      }
+
+      // Local-time "now" helpers
+      const now = () => new Date();
+      const minutesIntoToday = (d = now()) => d.getHours() * 60 + d.getMinutes();
+      const todayJsDay = () => now().getDay();
+
+      // ---------- TSML normalization ----------
+      // Sample TSML fields: name, slug, day (0-6 Sun..Sat), time "19:00", end_time, types, notes,
+      // location, formatted_address, latitude, longitude, region, sub_region
+      function normalizeTSML(items) {
+        if (!Array.isArray(items)) return [];
+        return items.map((it) => {
+          const lat = it.latitude != null ? Number(it.latitude) : null;
+          const lng = it.longitude != null ? Number(it.longitude) : null;
+          const day = it.day == null ? null : TSML_DAY_TO_JS(it.day);
+          return {
+            id: it.slug || `${it.name}-${day}-${it.time}`,
+            program: "AA",
+            name: it.name || "AA Meeting",
+            day,
+            time: it.time || null,
+            endTime: it.end_time || null,
+            types: Array.isArray(it.types) ? it.types : [],
+            notes: it.notes || "",
+            location: it.location || "",
+            address: it.formatted_address || it.address || "",
+            neighborhood: it.sub_region || it.region || "",
+            lat, lng,
+            url: it.url || it.website || "",
+            phone: it.conference_phone || "",
+            online: !!(it.conference_url || /online|zoom/i.test(it.types?.join(" ") || "")),
+            conferenceUrl: it.conference_url || "",
+          };
+        });
+      }
+
+      // ---------- Data fetch ----------
+      async function fetchAAFeed() {
+        const tries = [
+          AA_FEED,
+          // CORS-proxy fallbacks (best-effort; some are rate-limited)
+          `https://corsproxy.io/?${encodeURIComponent(AA_FEED)}`,
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(AA_FEED)}`,
+        ];
+        for (const url of tries) {
+          try {
+            const r = await fetch(url, { headers: { "Accept": "application/json" } });
+            if (!r.ok) continue;
+            const data = await r.json();
+            if (Array.isArray(data) && data.length) return { ok: true, data };
+            if (Array.isArray(data?.meetings)) return { ok: true, data: data.meetings };
+          } catch {}
+        }
+        return { ok: false, data: [] };
+      }
+
+      // ---------- UI atoms ----------
+      const ProgramBadge = ({ program }) => {
+        const m = {
+          AA:    "bg-aa-900 text-aa-500 ring-1 ring-aa-600/40",
+          NA:    "bg-na-900 text-na-500 ring-1 ring-na-600/40",
+          SMART: "bg-smart-900 text-smart-500 ring-1 ring-smart-600/40",
+        };
+        return <span className={`px-2 py-0.5 text-[11px] font-semibold rounded-md ${m[program] || "bg-ink-700 text-ink-300"}`}>{program}</span>;
+      };
+
+      const TypeChip = ({ children }) => (
+        <span className="px-2 py-0.5 text-[11px] rounded-md bg-ink-700 text-ink-300 whitespace-nowrap">{children}</span>
+      );
+
+      function IconPin(props) {
+        return (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M12 22s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>);
+      }
+      function IconClock(props) {
+        return (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>);
+      }
+      function IconCopy(props) {
+        return (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>);
+      }
+      function IconNav(props) {
+        return (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 11l18-8-8 18-2-8-8-2z"/></svg>);
+      }
+      function IconExt(props) {
+        return (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5"/></svg>);
+      }
+      function IconSearch(props) {
+        return (<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>);
+      }
+
+      // ---------- Meeting card ----------
+      function MeetingCard({ m }) {
+        const [copied, setCopied] = useState(false);
+        const dist = m.distance == null ? null : `${m.distance.toFixed(1)} mi`;
+        const accent = m.program === "AA" ? "border-l-aa-500"
+                     : m.program === "NA" ? "border-l-na-500"
+                     : m.program === "SMART" ? "border-l-smart-500"
+                     : "border-l-ink-600";
+
+        const handleCopy = async () => {
+          await copyText(m.address || m.location || m.name);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1400);
+        };
+
+        return (
+          <div className={`bg-ink-900 rounded-xl p-4 border border-ink-700 ${accent} border-l-4 shadow-sm`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <ProgramBadge program={m.program} />
+                  {dist && <span className="text-[11px] text-ink-400">{dist}</span>}
+                  {m.online && <TypeChip>Online</TypeChip>}
+                </div>
+                <h3 className="mt-1.5 text-base font-semibold text-white leading-snug truncate">{m.name}</h3>
+                {m.location && <div className="text-xs text-ink-300 truncate">{m.location}</div>}
+              </div>
+              <div className="text-right shrink-0">
+                <div className="flex items-center gap-1 text-ink-300 text-sm justify-end">
+                  <IconClock /> <span className="font-medium text-white">{fmtTime(m.time)}</span>
+                </div>
+                {m.endTime && <div className="text-[11px] text-ink-400">to {fmtTime(m.endTime)}</div>}
+                <div className="text-[11px] text-ink-400 mt-0.5">{m.day != null ? DAY_NAMES[m.day] : ""}</div>
+              </div>
+            </div>
+
+            {(m.address || m.neighborhood) && (
+              <div className="mt-2 flex items-start gap-1.5 text-xs text-ink-300">
+                <IconPin className="mt-0.5 shrink-0 text-ink-400" />
+                <div className="min-w-0">
+                  <div className="truncate">{m.address}</div>
+                  {m.neighborhood && <div className="text-ink-400 truncate">{m.neighborhood}</div>}
+                </div>
+              </div>
+            )}
+
+            {m.types && m.types.length > 0 && (
+              <div className="mt-2 flex gap-1 flex-wrap">
+                {m.types.slice(0, 6).map((t, i) => <TypeChip key={i}>{t}</TypeChip>)}
+              </div>
+            )}
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <a
+                href={mapsUrl(m.address, m.lat, m.lng)}
+                target="_blank" rel="noreferrer"
+                className="flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-ink-700 hover:bg-ink-600 text-white active:scale-[0.98] transition"
+              >
+                <IconNav /> Directions
+              </a>
+              <button
+                onClick={handleCopy}
+                className="flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-ink-700 hover:bg-ink-600 text-white active:scale-[0.98] transition"
+              >
+                <IconCopy /> {copied ? "Copied" : "Copy address"}
+              </button>
+            </div>
+            {m.conferenceUrl && (
+              <a href={m.conferenceUrl} target="_blank" rel="noreferrer"
+                 className="mt-2 flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-aa-600/80 hover:bg-aa-600 text-white">
+                <IconExt /> Join online
+              </a>
+            )}
+          </div>
+        );
+      }
+
+      // ---------- Fallback / deep-link card ----------
+      function PlatformCard({ program, name, description, href, accent }) {
+        return (
+          <div className={`bg-ink-900 rounded-xl p-4 border border-ink-700 border-l-4 ${accent}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                {program && <ProgramBadge program={program} />}
+                <h3 className="mt-1.5 text-base font-semibold text-white">{name}</h3>
+                <p className="text-xs text-ink-300 mt-1">{description}</p>
+              </div>
+            </div>
+            <a href={href} target="_blank" rel="noreferrer"
+               className="mt-3 inline-flex items-center justify-center w-full gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-ink-700 hover:bg-ink-600 text-white">
+              <IconExt /> Open {name}
+            </a>
+          </div>
+        );
+      }
+
+      // ---------- Main App ----------
+      function App() {
+        const [meetings, setMeetings] = useState([]);
+        const [feedStatus, setFeedStatus] = useState({ aa: "loading" }); // loading | ok | error
+        const [selectedDay, setSelectedDay] = useState(todayJsDay());
+        const [distance, setDistance] = useState(20); // 5/10/20/Infinity
+        const [program, setProgram] = useState("All"); // All | AA | NA | SMART
+        const [query, setQuery] = useState("");
+
+        // Fetch AA feed once
+        useEffect(() => {
+          let cancelled = false;
+          (async () => {
+            const { ok, data } = await fetchAAFeed();
+            if (cancelled) return;
+            if (!ok) { setFeedStatus({ aa: "error" }); return; }
+            const norm = normalizeTSML(data);
+            // Annotate with distance from Trenton
+            const withDist = norm.map((m) => ({
+              ...m,
+              distance: m.lat != null && m.lng != null ? haversine(TRENTON, { lat: m.lat, lng: m.lng }) : null,
+            }));
+            setMeetings(withDist);
+            setFeedStatus({ aa: "ok" });
+          })();
+          return () => { cancelled = true; };
+        }, []);
+
+        // Today's "in next 3 hours" badge count
+        const nextThreeHoursCount = useMemo(() => {
+          const today = todayJsDay();
+          const nowMin = minutesIntoToday();
+          const horizon = nowMin + 180;
+          return meetings.filter((m) =>
+            m.day === today &&
+            (() => {
+              const t = parseTimeToMinutes(m.time);
+              return t != null && t >= nowMin && t <= horizon;
+            })()
+          ).length;
+        }, [meetings]);
+
+        // Filter pipeline
+        const filtered = useMemo(() => {
+          let list = meetings.filter((m) => m.day === selectedDay);
+          if (program !== "All") list = list.filter((m) => m.program === program);
+          if (distance !== Infinity) list = list.filter((m) => m.distance == null || m.distance <= distance);
+          if (query.trim()) {
+            const q = query.trim().toLowerCase();
+            list = list.filter((m) =>
+              [m.name, m.location, m.address, m.neighborhood, ...(m.types || [])]
+                .filter(Boolean).join(" ").toLowerCase().includes(q)
+            );
+          }
+          list.sort((a,b) => {
+            const ta = parseTimeToMinutes(a.time) ?? 1e9;
+            const tb = parseTimeToMinutes(b.time) ?? 1e9;
+            if (ta !== tb) return ta - tb;
+            const da = a.distance ?? 1e9;
+            const db = b.distance ?? 1e9;
+            return da - db;
+          });
+          return list;
+        }, [meetings, selectedDay, program, distance, query]);
+
+        // Should we show SMART/NA fallback cards in the list?
+        const showSmartFallback = (program === "All" || program === "SMART");
+        const showNaFallback = (program === "All" || program === "NA");
+
+        const onDayKey = (e) => {
+          if (e.key === "ArrowRight") setSelectedDay((d) => (d + 1) % 7);
+          if (e.key === "ArrowLeft") setSelectedDay((d) => (d + 6) % 7);
+        };
+
+        return (
+          <div className="min-h-full">
+            {/* Header */}
+            <header className="sticky top-0 z-20 glass border-b border-ink-700">
+              <div className="max-w-3xl mx-auto px-4 pt-3 pb-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wider text-ink-400">Recovery near you</div>
+                    <h1 className="text-lg font-semibold text-white">Trenton, MI · 48183</h1>
+                  </div>
+                  <div className="relative">
+                    <button
+                      onClick={() => setSelectedDay(todayJsDay())}
+                      className={`relative px-3 py-2 rounded-xl text-xs font-semibold ${nextThreeHoursCount > 0 ? "bg-smart-600 text-white" : "bg-ink-700 text-ink-300"}`}
+                      title="Meetings in the next 3 hours"
+                    >
+                      <span className={nextThreeHoursCount > 0 ? "pulse-dot relative" : ""}>
+                        {nextThreeHoursCount} in next 3h
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Day tabs */}
+                <div className="mt-3 -mx-4 px-4 overflow-x-auto scroll-x" onKeyDown={onDayKey} tabIndex={0}>
+                  <div className="flex gap-1.5 w-max">
+                    {DAY_NAMES.map((d, i) => {
+                      const isToday = i === todayJsDay();
+                      const isSel = i === selectedDay;
+                      return (
+                        <button
+                          key={d}
+                          onClick={() => setSelectedDay(i)}
+                          className={`relative px-3 py-1.5 rounded-lg text-xs font-medium border ${isSel ? "bg-white text-ink-950 border-white" : "bg-ink-800 text-ink-300 border-ink-700"}`}
+                        >
+                          {d}
+                          {isToday && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-smart-500 align-middle" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Search */}
+                <div className="mt-3 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"><IconSearch/></span>
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search by name, neighborhood, or type"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-ink-800 border border-ink-700 text-sm text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-aa-600"
+                  />
+                </div>
+
+                {/* Filters row */}
+                <div className="mt-3 flex items-center gap-2 overflow-x-auto scroll-x -mx-4 px-4 pb-1">
+                  <div className="flex gap-1 bg-ink-800 border border-ink-700 rounded-lg p-1">
+                    {["All","AA","NA","SMART"].map((p) => (
+                      <button key={p} onClick={() => setProgram(p)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium ${program === p ? "bg-white text-ink-950" : "text-ink-300"}`}>
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-1 bg-ink-800 border border-ink-700 rounded-lg p-1">
+                    {[5,10,20,Infinity].map((d) => (
+                      <button key={String(d)} onClick={() => setDistance(d)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium ${distance === d ? "bg-white text-ink-950" : "text-ink-300"}`}>
+                        {d === Infinity ? "Any" : `${d} mi`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </header>
+
+            {/* List */}
+            <main className="max-w-3xl mx-auto px-4 py-4 pb-24">
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="text-sm font-semibold text-ink-300">
+                  {DAY_FULL[selectedDay]} · {filtered.length} meeting{filtered.length === 1 ? "" : "s"}
+                </h2>
+                {feedStatus.aa === "loading" && <span className="text-[11px] text-ink-400">Loading AA feed…</span>}
+                {feedStatus.aa === "error" && <span className="text-[11px] text-rose-400">AA feed unavailable</span>}
+              </div>
+
+              {/* Feed-down banner */}
+              {feedStatus.aa === "error" && (
+                <div className="mb-3 rounded-xl border border-rose-500/40 bg-rose-900/20 p-3 text-xs text-rose-200">
+                  Couldn't load the AA Southeast Michigan feed in the browser (likely a CORS or network issue).
+                  You can still use the official locators below.
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {filtered.map((m) => <MeetingCard key={m.id} m={m} />)}
+              </div>
+
+              {/* External platforms */}
+              <section className="mt-8">
+                <h2 className="text-sm font-semibold text-ink-300 mb-2">More sources</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {showSmartFallback && (
+                    <PlatformCard
+                      program="SMART"
+                      name="SMART Recovery"
+                      description={`Search SMART meetings near ${TRENTON.zip} on the official locator. CORS prevents direct fetch here.`}
+                      href={SMART_DEEPLINK}
+                      accent="border-l-smart-500"
+                    />
+                  )}
+                  {showNaFallback && (
+                    <PlatformCard
+                      program="NA"
+                      name="NA Meeting Search"
+                      description="Find Narcotics Anonymous meetings on the official NA.org locator."
+                      href={NA_DEEPLINK}
+                      accent="border-l-na-500"
+                    />
+                  )}
+                  <PlatformCard
+                    name="Passenger Compass"
+                    description="Peer support & recovery navigation — no public API, opens in a new tab."
+                    href={PASSENGER_LINK}
+                    accent="border-l-ink-500"
+                  />
+                  <PlatformCard
+                    name="Newform"
+                    description="Newform recovery community — opens in a new tab."
+                    href={NEWFORM_LINK}
+                    accent="border-l-ink-500"
+                  />
+                </div>
+              </section>
+
+              <footer className="mt-10 text-[11px] text-ink-400 text-center">
+                Data: aaferndale.org TSML feed · Distances from {TRENTON.city} ({TRENTON.lat}, {TRENTON.lng})
+              </footer>
+            </main>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
