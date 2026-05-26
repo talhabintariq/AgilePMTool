@@ -91,9 +91,18 @@
       // TSML day mapping: 0=Sunday ... 6=Saturday (matches JS Date.getDay())
       const TSML_DAY_TO_JS = (d) => Number(d);
 
-      // TSML JSON endpoint (CORS-enabled). The legacy ?tsml-output=json route now returns HTML.
-      const AA_FEED = "https://aaferndale.org/wp-admin/admin-ajax.php?action=meetings";
+      // TSML JSON endpoints (CORS-enabled). The legacy ?tsml-output=json route now returns HTML.
+      // Each WordPress + TSML plugin install exposes its meetings at /wp-admin/admin-ajax.php?action=meetings.
+      // SOURCES is curated from probing major AA intergroups for working CORS-friendly feeds.
       const AA_FEED_SNAPSHOT = "data/aa-feed-snapshot.json";
+      const SOURCES = [
+        { key: "se-mi",       name: "SE Michigan",       url: "https://aaferndale.org/wp-admin/admin-ajax.php?action=meetings", snapshot: AA_FEED_SNAPSHOT },
+        { key: "cincinnati",  name: "Cincinnati",        url: "https://aacincinnati.org/wp-admin/admin-ajax.php?action=meetings" },
+        { key: "nyc",         name: "NYC Intergroup",    url: "https://nyintergroup.org/wp-admin/admin-ajax.php?action=meetings" },
+        { key: "phoenix",     name: "Phoenix",           url: "https://aaphoenix.org/wp-admin/admin-ajax.php?action=meetings" },
+        { key: "houston",     name: "Houston",           url: "https://aahouston.org/wp-admin/admin-ajax.php?action=meetings" },
+        { key: "minneapolis", name: "Minneapolis",       url: "https://aaminneapolis.org/wp-admin/admin-ajax.php?action=meetings" },
+      ];
       const SMART_DEEPLINK = `https://meetings.smartrecovery.org/meetings/?distance_units=miles&distance=20&location=${TRENTON.zip}`;
       const NA_DEEPLINK = `https://www.na.org/meetingsearch/`;
       const DHARMA_DEEPLINK = "https://recoverydharma.org/find-meetings/";
@@ -211,14 +220,17 @@
       // ---------- TSML normalization ----------
       // Sample TSML fields: name, slug, day (0-6 Sun..Sat), time "19:00", end_time, types, notes,
       // location, formatted_address, latitude, longitude, region, sub_region
-      function normalizeTSML(items) {
+      function normalizeTSML(items, sourceKey = "") {
         if (!Array.isArray(items)) return [];
+        const prefix = sourceKey ? `${sourceKey}:` : "";
         return items.map((it) => {
           const lat = it.latitude != null ? Number(it.latitude) : null;
           const lng = it.longitude != null ? Number(it.longitude) : null;
           const day = it.day == null ? null : TSML_DAY_TO_JS(it.day);
+          const rawId = it.slug || it.id || `${it.name}-${day}-${it.time}`;
           return {
-            id: it.slug || `${it.name}-${day}-${it.time}`,
+            id: prefix + rawId,
+            sourceKey,
             program: "AA",
             name: it.name || "AA Meeting",
             day,
@@ -239,24 +251,44 @@
       }
 
       // ---------- Data fetch ----------
-      // Try the live CORS-enabled endpoint, then proxy fallbacks, then a bundled snapshot.
-      async function fetchAAFeed() {
+      // Fetch one source: try the live URL, then CORS proxies, then the bundled snapshot if any.
+      async function fetchOneSource(src) {
         const tries = [
-          { url: AA_FEED, source: "live" },
-          { url: `https://corsproxy.io/?${encodeURIComponent(AA_FEED)}`, source: "proxy:corsproxy" },
-          { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(AA_FEED)}`, source: "proxy:allorigins" },
-          { url: AA_FEED_SNAPSHOT, source: "snapshot" },
+          src.url,
+          `https://corsproxy.io/?${encodeURIComponent(src.url)}`,
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(src.url)}`,
         ];
-        for (const { url, source } of tries) {
+        if (src.snapshot) tries.push(src.snapshot);
+        for (const url of tries) {
           try {
             const r = await fetch(url, { headers: { "Accept": "application/json" } });
             if (!r.ok) continue;
             const data = await r.json();
-            if (Array.isArray(data) && data.length) return { ok: true, data, source };
-            if (Array.isArray(data?.meetings)) return { ok: true, data: data.meetings, source };
+            if (Array.isArray(data) && data.length) return { ok: true, items: data };
+            if (Array.isArray(data?.meetings)) return { ok: true, items: data.meetings };
           } catch {}
         }
-        return { ok: false, data: [], source: null };
+        return { ok: false, items: [] };
+      }
+
+      // Fetch every source in parallel, normalize, and return a deduped flat list.
+      async function fetchAllSources() {
+        const results = await Promise.all(
+          SOURCES.map((s) => fetchOneSource(s).then((r) => ({ ...r, src: s })))
+        );
+        const sourcesOk = [];
+        const meetings = [];
+        const seen = new Set();
+        for (const { ok, items, src } of results) {
+          if (!ok) continue;
+          sourcesOk.push(src.name);
+          for (const m of normalizeTSML(items, src.key)) {
+            if (seen.has(m.id)) continue;
+            seen.add(m.id);
+            meetings.push(m);
+          }
+        }
+        return { ok: sourcesOk.length > 0, meetings, sources: sourcesOk };
       }
 
       // ---------- UI atoms ----------
@@ -468,15 +500,15 @@
 
         const clearLocation = useCallback(() => { setUserPos(null); setGeoStatus("idle"); }, []);
 
-        // Fetch AA feed once (distances are computed reactively below)
+        // Fetch every source in parallel (distances are computed reactively below)
         useEffect(() => {
           let cancelled = false;
           (async () => {
-            const { ok, data, source } = await fetchAAFeed();
+            const { ok, meetings: m, sources } = await fetchAllSources();
             if (cancelled) return;
-            if (!ok) { setFeedStatus({ aa: "error", source: null }); return; }
-            setMeetings(normalizeTSML(data));
-            setFeedStatus({ aa: "ok", source });
+            if (!ok) { setFeedStatus({ aa: "error", sources: [] }); return; }
+            setMeetings(m);
+            setFeedStatus({ aa: "ok", sources });
           })();
           return () => { cancelled = true; };
         }, []);
@@ -734,17 +766,19 @@
                 <h2 className="text-sm font-semibold text-ink-300">
                   {DAY_FULL[selectedDay]} · {filtered.length} meeting{filtered.length === 1 ? "" : "s"}
                 </h2>
-                {feedStatus.aa === "loading" && <span className="text-[11px] text-ink-400">Loading AA feed…</span>}
-                {feedStatus.aa === "ok" && feedStatus.source && feedStatus.source !== "live" && (
-                  <span className="text-[11px] text-smart-500" title={`Loaded via ${feedStatus.source}`}>via {feedStatus.source}</span>
+                {feedStatus.aa === "loading" && <span className="text-[11px] text-ink-400">Loading {SOURCES.length} feeds…</span>}
+                {feedStatus.aa === "ok" && feedStatus.sources && (
+                  <span className="text-[11px] text-ink-400" title={feedStatus.sources.join(", ")}>
+                    {feedStatus.sources.length}/{SOURCES.length} sources
+                  </span>
                 )}
-                {feedStatus.aa === "error" && <span className="text-[11px] text-rose-400">AA feed unavailable</span>}
+                {feedStatus.aa === "error" && <span className="text-[11px] text-rose-400">All feeds unavailable</span>}
               </div>
 
               {/* Feed-down banner */}
               {feedStatus.aa === "error" && (
                 <div className="mb-3 rounded-xl border border-rose-500/40 bg-rose-900/20 p-3 text-xs text-rose-200">
-                  Couldn't load the AA Southeast Michigan feed in the browser (likely a CORS or network issue).
+                  Couldn't reach any AA meeting feeds (network may be offline).
                   You can still use the official locators below.
                 </div>
               )}
