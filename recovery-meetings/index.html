@@ -83,6 +83,12 @@
       const AA_FEED_SNAPSHOT = "data/aa-feed-snapshot.json";
       const SMART_DEEPLINK = `https://meetings.smartrecovery.org/meetings/?distance_units=miles&distance=20&location=${TRENTON.zip}`;
       const NA_DEEPLINK = `https://www.na.org/meetingsearch/`;
+      const DHARMA_DEEPLINK = "https://recoverydharma.org/find-meetings/";
+      const REFUGE_DEEPLINK = "https://www.refugerecovery.org/meetings";
+      const CELEBRATE_DEEPLINK = "https://locator.crgroups.info/";
+      const LIFERING_DEEPLINK = "https://lifering.org/meetings/";
+      const WFS_DEEPLINK = "https://womenforsobriety.org/meeting-finder/";
+      const ALANON_DEEPLINK = "https://al-anon.org/al-anon-meetings/find-an-al-anon-meeting/";
       const PASSENGER_LINK = "https://passengerrecovery.com/compass";
       const NEWFORM_LINK = "https://newform.org";
 
@@ -605,7 +611,7 @@
 
               {/* External platforms */}
               <section className="mt-8">
-                <h2 className="text-sm font-semibold text-ink-300 mb-2">More sources</h2>
+                <h2 className="text-sm font-semibold text-ink-300 mb-2">More programs &amp; locators</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {showSmartFallback && (
                     <PlatformCard
@@ -625,6 +631,42 @@
                       accent="border-l-na-500"
                     />
                   )}
+                  <PlatformCard
+                    name="Recovery Dharma"
+                    description="Buddhist-inspired, peer-led recovery from addiction. In-person and online meetings worldwide."
+                    href={DHARMA_DEEPLINK}
+                    accent="border-l-violet-500"
+                  />
+                  <PlatformCard
+                    name="Refuge Recovery"
+                    description="Mindfulness-based recovery community rooted in Buddhist principles."
+                    href={REFUGE_DEEPLINK}
+                    accent="border-l-violet-500"
+                  />
+                  <PlatformCard
+                    name="Celebrate Recovery"
+                    description="Christ-centered recovery program with 35,000+ groups across churches worldwide."
+                    href={CELEBRATE_DEEPLINK}
+                    accent="border-l-rose-500"
+                  />
+                  <PlatformCard
+                    name="LifeRing Secular Recovery"
+                    description="Secular, abstinence-based peer-support — no higher power required."
+                    href={LIFERING_DEEPLINK}
+                    accent="border-l-teal-500"
+                  />
+                  <PlatformCard
+                    name="Women for Sobriety"
+                    description="Women-only recovery program focused on emotional and spiritual growth."
+                    href={WFS_DEEPLINK}
+                    accent="border-l-pink-500"
+                  />
+                  <PlatformCard
+                    name="Al-Anon"
+                    description="For family members and friends affected by someone else's drinking."
+                    href={ALANON_DEEPLINK}
+                    accent="border-l-sky-500"
+                  />
                   <PlatformCard
                     name="Passenger Compass"
                     description="Peer support & recovery navigation — no public API, opens in a new tab."

@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ["/home/user/AgilePMTool/recovery-meetings/index.html"],
+  content: ["./index.html"],
   theme: {
     extend: {
       colors: {
