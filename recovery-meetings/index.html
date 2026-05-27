@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1220" />
+    <title>Recovery Meetings · Trenton, MI (48183)</title>
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon.svg" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Recovery" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("sw.js").catch(() => {});
+        });
+      }
+    </script>
+    <!-- Vendored Tailwind (prebuilt). Falls through to CDN if vendor/ is absent. -->
+    <link rel="stylesheet" href="vendor/tailwind.css" />
+    <script>
+      // If the vendored stylesheet failed to load, fall back to the Tailwind JIT CDN.
+      (function () {
+        var hasTW = false;
+        for (var i = 0; i < document.styleSheets.length; i++) {
+          try { if ((document.styleSheets[i].href || "").indexOf("vendor/tailwind.css") !== -1 && document.styleSheets[i].cssRules) { hasTW = true; break; } } catch (e) {}
+        }
+        if (!hasTW) {
+          window.tailwind = window.tailwind || {};
+          window.tailwind.config = { theme: { extend: { colors: {
+            aa:    { 500: "#3b82f6", 600: "#2563eb", 900: "#0b2447" },
+            na:    { 500: "#10b981", 600: "#059669", 900: "#073b2e" },
+            smart: { 500: "#f59e0b", 600: "#d97706", 900: "#3a2406" },
+            ink:   { 950: "#070b14", 900: "#0b1220", 800: "#111a2c", 700: "#1b263f", 600: "#2a3654", 500: "#475085", 400: "#7d86ad", 300: "#c8cfe8" },
+          } } } };
+          var s = document.createElement("script");
+          s.src = "https://cdn.tailwindcss.com";
+          document.head.appendChild(s);
+        }
+      })();
+    </script>
+    <style>
+      html, body, #root { height: 100%; }
+      body { background: #070b14; color: #e6e9f5; -webkit-tap-highlight-color: transparent; }
+      .scroll-x { scrollbar-width: none; }
+      .scroll-x::-webkit-scrollbar { display: none; }
+      .glass { backdrop-filter: blur(8px); background: rgba(11,18,32,.78); }
+      .pulse-dot::after { content:""; position:absolute; top:-2px; right:-2px; width:8px; height:8px; border-radius:9999px; background:#f59e0b; box-shadow:0 0 0 0 rgba(245,158,11,.7); animation:pulse 1.8s infinite; }
+      @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(245,158,11,.7)} 70%{box-shadow:0 0 0 10px rgba(245,158,11,0)} 100%{box-shadow:0 0 0 0 rgba(245,158,11,0)} }
+    </style>
+    <!-- Vendored React + Babel, with CDN fallback if vendor/ is missing. -->
+    <script>
+      (function () {
+        function load(src, cb) {
+          var s = document.createElement("script");
+          s.src = src; s.async = false;
+          s.onload = function () { cb && cb(true); };
+          s.onerror = function () { cb && cb(false); };
+          document.head.appendChild(s);
+        }
+        function chain(local, cdn, done) {
+          load(local, function (ok) { ok ? done() : load(cdn, function () { done(); }); });
+        }
+        chain("vendor/react.min.js", "https://unpkg.com/react@18/umd/react.production.min.js", function () {
+          chain("vendor/react-dom.min.js", "https://unpkg.com/react-dom@18/umd/react-dom.production.min.js", function () {
+            chain("vendor/babel.min.js", "https://unpkg.com/@babel/standalone/babel.min.js", function () {
+              // Babel Standalone only auto-scans on DOMContentLoaded; if we're late, kick it.
+              if (window.Babel && typeof window.Babel.transformScriptTags === "function") {
+                try { window.Babel.transformScriptTags(); } catch (e) { console.error(e); }
+              }
+              window.__VENDORED_READY__ = true;
+            });
+          });
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="react" data-type="module">
+      const { useEffect, useMemo, useState, useCallback, useRef } = React;
+
+      // ---------- Constants ----------
+      const TRENTON = { lat: 42.1211, lng: -83.2103, zip: "48183", city: "Trenton, MI" };
+      const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const DAY_FULL = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+      // TSML day mapping: 0=Sunday ... 6=Saturday (matches JS Date.getDay())
+      const TSML_DAY_TO_JS = (d) => Number(d);
+
+      // TSML JSON endpoints (CORS-enabled). The legacy ?tsml-output=json route now returns HTML.
+      // Each WordPress + TSML plugin install exposes its meetings at /wp-admin/admin-ajax.php?action=meetings.
+      // SOURCES is curated from probing major AA intergroups for working CORS-friendly feeds.
+      const AA_FEED_SNAPSHOT = "data/aa-feed-snapshot.json";
+      const SOURCES = [
+        { key: "se-mi",       name: "SE Michigan",       url: "https://aaferndale.org/wp-admin/admin-ajax.php?action=meetings", snapshot: AA_FEED_SNAPSHOT },
+        { key: "cincinnati",  name: "Cincinnati",        url: "https://aacincinnati.org/wp-admin/admin-ajax.php?action=meetings" },
+        { key: "nyc",         name: "NYC Intergroup",    url: "https://nyintergroup.org/wp-admin/admin-ajax.php?action=meetings" },
+        { key: "phoenix",     name: "Phoenix",           url: "https://aaphoenix.org/wp-admin/admin-ajax.php?action=meetings" },
+        { key: "houston",     name: "Houston",           url: "https://aahouston.org/wp-admin/admin-ajax.php?action=meetings" },
+        { key: "minneapolis", name: "Minneapolis",       url: "https://aaminneapolis.org/wp-admin/admin-ajax.php?action=meetings" },
+      ];
+      const SMART_DEEPLINK = `https://meetings.smartrecovery.org/meetings/?distance_units=miles&distance=20&location=${TRENTON.zip}`;
+      const NA_DEEPLINK = `https://www.na.org/meetingsearch/`;
+      const DHARMA_DEEPLINK = "https://recoverydharma.org/find-meetings/";
+      const REFUGE_DEEPLINK = "https://www.refugerecovery.org/meetings";
+      const CELEBRATE_DEEPLINK = "https://locator.crgroups.info/";
+      const LIFERING_DEEPLINK = "https://lifering.org/meetings/";
+      const WFS_DEEPLINK = "https://womenforsobriety.org/meeting-finder/";
+      const ALANON_DEEPLINK = "https://al-anon.org/al-anon-meetings/find-an-al-anon-meeting/";
+      const PASSENGER_LINK = "https://passengerrecovery.com/compass";
+      const NEWFORM_LINK = "https://newform.org";
+
+      // ---------- Helpers ----------
+      const toRad = (n) => (n * Math.PI) / 180;
+      function haversine(a, b) {
+        if (!a || !b || a.lat == null || a.lng == null || b.lat == null || b.lng == null) return null;
+        const R = 3958.8; // miles
+        const dLat = toRad(b.lat - a.lat);
+        const dLng = toRad(b.lng - a.lng);
+        const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
+        return 2 * R * Math.asin(Math.sqrt(s));
+      }
+
+      function parseTimeToMinutes(t) {
+        if (!t) return null;
+        const m = /^(\d{1,2}):(\d{2})/.exec(String(t).trim());
+        if (!m) return null;
+        return Number(m[1]) * 60 + Number(m[2]);
+      }
+
+      function fmtTime(t) {
+        const mins = parseTimeToMinutes(t);
+        if (mins == null) return t || "";
+        let h = Math.floor(mins / 60);
+        const m = mins % 60;
+        const ap = h >= 12 ? "PM" : "AM";
+        h = h % 12;
+        if (h === 0) h = 12;
+        return `${h}:${m.toString().padStart(2,"0")} ${ap}`;
+      }
+
+      function isAppleDevice() {
+        const ua = navigator.userAgent || "";
+        return /iPhone|iPad|iPod|Macintosh/.test(ua);
+      }
+
+      function mapsUrl(addr, lat, lng) {
+        const q = lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(addr || "");
+        if (isAppleDevice()) return `https://maps.apple.com/?daddr=${q}`;
+        return `https://www.google.com/maps/dir/?api=1&destination=${q}`;
+      }
+
+      async function copyText(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch {
+          // Fallback
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand("copy"); } catch {}
+          document.body.removeChild(ta);
+          return true;
+        }
+      }
+
+      // Local-time "now" helpers
+      const now = () => new Date();
+      const minutesIntoToday = (d = now()) => d.getHours() * 60 + d.getMinutes();
+      const todayJsDay = () => now().getDay();
+
+      // localStorage helpers — fail-soft when storage is unavailable (private mode, etc.)
+      const LS_PREFIX = "rm48183:";
+      function lsGet(key, fallback) {
+        try { const v = localStorage.getItem(LS_PREFIX + key); return v == null ? fallback : JSON.parse(v); }
+        catch { return fallback; }
+      }
+      function lsSet(key, value) {
+        try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); } catch {}
+      }
+
+      function humanizeMinutes(mins) {
+        if (mins < 1) return "starting now";
+        if (mins < 60) return `in ${mins} min`;
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return m === 0 ? `in ${h}h` : `in ${h}h ${m}m`;
+      }
+
+      // A meeting is "Hybrid" when it has both a physical address and an online conference,
+      // "Online" when conference-only, otherwise "In-person".
+      function attendanceOf(m) {
+        const hasOnline = !!(m.online || m.conferenceUrl);
+        const hasPhysical = !!(m.address && !/^online$/i.test(m.address));
+        if (hasOnline && hasPhysical) return "Hybrid";
+        if (hasOnline) return "Online";
+        return "In-person";
+      }
+
+      // Time-of-day buckets in local minutes. Night wraps midnight.
+      function timeBucket(mins) {
+        if (mins == null) return null;
+        if (mins >= 300 && mins < 480) return "Early";       // 5:00–7:59
+        if (mins >= 480 && mins < 720) return "Morning";     // 8:00–11:59
+        if (mins >= 720 && mins < 1020) return "Afternoon";  // 12:00–16:59
+        if (mins >= 1020 && mins < 1260) return "Evening";   // 17:00–20:59
+        return "Night";                                       // 21:00–4:59
+      }
+
+      const TYPE_CHIPS = ["Open","Closed","Beginners","Women","Men","Big Book","Step Study","Speaker","Discussion","LGBTQ","Young People"];
+      const ATTENDANCE_OPTIONS = ["All","In-person","Online","Hybrid"];
+      const TIME_OPTIONS = ["Any","Early","Morning","Afternoon","Evening","Night"];
+
+      // ---------- TSML normalization ----------
+      // Sample TSML fields: name, slug, day (0-6 Sun..Sat), time "19:00", end_time, types, notes,
+      // location, formatted_address, latitude, longitude, region, sub_region
+      function normalizeTSML(items, sourceKey = "") {
+        if (!Array.isArray(items)) return [];
+        const prefix = sourceKey ? `${sourceKey}:` : "";
+        return items.map((it) => {
+          const lat = it.latitude != null ? Number(it.latitude) : null;
+          const lng = it.longitude != null ? Number(it.longitude) : null;
+          const day = it.day == null ? null : TSML_DAY_TO_JS(it.day);
+          const rawId = it.slug || it.id || `${it.name}-${day}-${it.time}`;
+          return {
+            id: prefix + rawId,
+            sourceKey,
+            program: "AA",
+            name: it.name || "AA Meeting",
+            day,
+            time: it.time || null,
+            endTime: it.end_time || null,
+            types: Array.isArray(it.types) ? it.types : [],
+            notes: it.notes || "",
+            location: it.location || "",
+            address: it.formatted_address || it.address || "",
+            neighborhood: it.sub_region || it.region || "",
+            lat, lng,
+            url: it.url || it.website || "",
+            phone: it.conference_phone || "",
+            online: !!(it.conference_url || /online|zoom/i.test(it.types?.join(" ") || "")),
+            conferenceUrl: it.conference_url || "",
+          };
+        });
+      }
+
+      // ---------- Data fetch ----------
+      // Fetch one source: live URL, then bundled snapshot if any. Public CORS proxies
+      // were dropped because they fire false-positive CORS errors in the browser console
+      // even when the live endpoint succeeds — the live admin-ajax endpoints already
+      // serve Access-Control-Allow-Origin: * so they don't need proxying.
+      async function fetchOneSource(src) {
+        const tries = [src.url];
+        if (src.snapshot) tries.push(src.snapshot);
+        for (const url of tries) {
+          try {
+            const r = await fetch(url);
+            if (!r.ok) continue;
+            const data = await r.json();
+            if (Array.isArray(data) && data.length) return { ok: true, items: data };
+            if (Array.isArray(data?.meetings)) return { ok: true, items: data.meetings };
+          } catch {}
+        }
+        return { ok: false, items: [] };
+      }
+
+      // Fetch every source in parallel, normalize, and return a deduped flat list.
+      async function fetchAllSources() {
+        const results = await Promise.all(
+          SOURCES.map((s) => fetchOneSource(s).then((r) => ({ ...r, src: s })))
+        );
+        const sourcesOk = [];
+        const meetings = [];
+        const seen = new Set();
+        for (const { ok, items, src } of results) {
+          if (!ok) continue;
+          sourcesOk.push(src.name);
+          for (const m of normalizeTSML(items, src.key)) {
+            if (seen.has(m.id)) continue;
+            seen.add(m.id);
+            meetings.push(m);
+          }
+        }
+        return { ok: sourcesOk.length > 0, meetings, sources: sourcesOk };
+      }
+
+      // ---------- UI atoms ----------
+      const ProgramBadge = ({ program }) => {
+        const m = {
+          AA:    "bg-aa-900 text-aa-500 ring-1 ring-aa-600/40",
+          NA:    "bg-na-900 text-na-500 ring-1 ring-na-600/40",
+          SMART: "bg-smart-900 text-smart-500 ring-1 ring-smart-600/40",
+        };
+        return <span className={`px-2 py-0.5 text-[11px] font-semibold rounded-md ${m[program] || "bg-ink-700 text-ink-300"}`}>{program}</span>;
+      };
+
+      const TypeChip = ({ children }) => (
+        <span className="px-2 py-0.5 text-[11px] rounded-md bg-ink-700 text-ink-300 whitespace-nowrap">{children}</span>
+      );
+
+      function IconPin(props) {
+        return (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M12 22s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>);
+      }
+      function IconClock(props) {
+        return (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>);
+      }
+      function IconCopy(props) {
+        return (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>);
+      }
+      function IconNav(props) {
+        return (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 11l18-8-8 18-2-8-8-2z"/></svg>);
+      }
+      function IconExt(props) {
+        return (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5"/></svg>);
+      }
+      function IconSearch(props) {
+        return (<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>);
+      }
+      function IconStar({ filled, ...props }) {
+        return (<svg viewBox="0 0 24 24" width="16" height="16" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9 12 2"/></svg>);
+      }
+      function IconSliders(props) {
+        return (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="4" y1="6" x2="20" y2="6"/><circle cx="15" cy="6" r="2.2" fill="currentColor"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="9" cy="12" r="2.2" fill="currentColor"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="17" cy="18" r="2.2" fill="currentColor"/></svg>);
+      }
+
+      // Chip used in the active-filter strip — tap to remove that filter.
+      function ActiveChip({ children, onRemove }) {
+        return (
+          <button onClick={onRemove}
+            className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-aa-600/20 border border-aa-600/40 text-xs text-white hover:bg-aa-600/30">
+            {children}
+            <span className="text-ink-300 text-sm leading-none">×</span>
+          </button>
+        );
+      }
+
+      // Generic single-select pill group used inside the filter sheet.
+      function FilterPills({ label, options, value, onChange, format }) {
+        return (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-ink-400 mb-2">{label}</div>
+            <div className="flex gap-1.5 flex-wrap">
+              {options.map((opt) => (
+                <button key={String(opt)} onClick={() => onChange(opt)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${value === opt ? "bg-white text-ink-950 border-white" : "bg-ink-800 text-ink-300 border-ink-700"}`}>
+                  {format ? format(opt) : opt}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
+      // ---------- Meeting card ----------
+      function MeetingCard({ m, isFavorite, onToggleFavorite }) {
+        const [copied, setCopied] = useState(false);
+        const dist = m.distance == null ? null : `${m.distance.toFixed(1)} mi`;
+        const accent = m.program === "AA" ? "border-l-aa-500"
+                     : m.program === "NA" ? "border-l-na-500"
+                     : m.program === "SMART" ? "border-l-smart-500"
+                     : "border-l-ink-600";
+
+        const handleCopy = async () => {
+          await copyText(m.address || m.location || m.name);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1400);
+        };
+
+        return (
+          <div className={`bg-ink-900 rounded-xl p-4 border border-ink-700 ${accent} border-l-4 shadow-sm`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <ProgramBadge program={m.program} />
+                  {dist && <span className="text-[11px] text-ink-400">{dist}</span>}
+                  {m.online && <TypeChip>Online</TypeChip>}
+                </div>
+                <h3 className="mt-1.5 text-base font-semibold text-white leading-snug truncate">{m.name}</h3>
+                {m.location && <div className="text-xs text-ink-300 truncate">{m.location}</div>}
+              </div>
+              <div className="text-right shrink-0">
+                <div className="flex items-center gap-1.5 justify-end">
+                  <button
+                    onClick={onToggleFavorite}
+                    title={isFavorite ? "Unstar" : "Star"}
+                    aria-label={isFavorite ? "Unstar meeting" : "Star meeting"}
+                    className={`p-1 rounded-md transition ${isFavorite ? "text-smart-500" : "text-ink-400 hover:text-white"}`}
+                  >
+                    <IconStar filled={isFavorite} />
+                  </button>
+                  <div className="flex items-center gap-1 text-ink-300 text-sm">
+                    <IconClock /> <span className="font-medium text-white">{fmtTime(m.time)}</span>
+                  </div>
+                </div>
+                {m.endTime && <div className="text-[11px] text-ink-400">to {fmtTime(m.endTime)}</div>}
+                <div className="text-[11px] text-ink-400 mt-0.5">{m.day != null ? DAY_NAMES[m.day] : ""}</div>
+              </div>
+            </div>
+
+            {(m.address || m.neighborhood) && (
+              <div className="mt-2 flex items-start gap-1.5 text-xs text-ink-300">
+                <IconPin className="mt-0.5 shrink-0 text-ink-400" />
+                <div className="min-w-0">
+                  <div className="truncate">{m.address}</div>
+                  {m.neighborhood && <div className="text-ink-400 truncate">{m.neighborhood}</div>}
+                </div>
+              </div>
+            )}
+
+            {m.types && m.types.length > 0 && (
+              <div className="mt-2 flex gap-1 flex-wrap">
+                {m.types.slice(0, 6).map((t, i) => <TypeChip key={i}>{t}</TypeChip>)}
+              </div>
+            )}
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <a
+                href={mapsUrl(m.address, m.lat, m.lng)}
+                target="_blank" rel="noreferrer"
+                className="flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-ink-700 hover:bg-ink-600 text-white active:scale-[0.98] transition"
+              >
+                <IconNav /> Directions
+              </a>
+              <button
+                onClick={handleCopy}
+                className="flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-ink-700 hover:bg-ink-600 text-white active:scale-[0.98] transition"
+              >
+                <IconCopy /> {copied ? "Copied" : "Copy address"}
+              </button>
+            </div>
+            {m.conferenceUrl && (
+              <a href={m.conferenceUrl} target="_blank" rel="noreferrer"
+                 className="mt-2 flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-aa-600/80 hover:bg-aa-600 text-white">
+                <IconExt /> Join online
+              </a>
+            )}
+          </div>
+        );
+      }
+
+      // ---------- Fallback / deep-link card ----------
+      function PlatformCard({ program, name, description, href, accent }) {
+        return (
+          <div className={`bg-ink-900 rounded-xl p-4 border border-ink-700 border-l-4 ${accent}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                {program && <ProgramBadge program={program} />}
+                <h3 className="mt-1.5 text-base font-semibold text-white">{name}</h3>
+                <p className="text-xs text-ink-300 mt-1">{description}</p>
+              </div>
+            </div>
+            <a href={href} target="_blank" rel="noreferrer"
+               className="mt-3 inline-flex items-center justify-center w-full gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-ink-700 hover:bg-ink-600 text-white">
+              <IconExt /> Open {name}
+            </a>
+          </div>
+        );
+      }
+
+      // ---------- Main App ----------
+      function App() {
+        const [meetings, setMeetings] = useState([]);
+        const [feedStatus, setFeedStatus] = useState({ aa: "loading" }); // loading | ok | error
+        const [selectedDay, setSelectedDay] = useState(todayJsDay());
+        const [distance, setDistance] = useState(() => {
+          const v = lsGet("distance", 20);
+          return v === null ? Infinity : v; // JSON.stringify(Infinity) === "null"
+        });
+        const [program, setProgram] = useState(() => lsGet("program", "All"));
+        const [query, setQuery] = useState("");
+        const [userPos, setUserPos] = useState(() => lsGet("userPos", null));
+        const [geoStatus, setGeoStatus] = useState("idle"); // idle | requesting | denied | error
+        const [attendance, setAttendance] = useState(() => lsGet("attendance", "All"));
+        const [timeOfDay, setTimeOfDay] = useState(() => lsGet("timeOfDay", "Any"));
+        const [typeFilters, setTypeFilters] = useState(() => lsGet("typeFilters", []));
+        const [favorites, setFavorites] = useState(() => lsGet("favorites", []));
+        const [starredOnly, setStarredOnly] = useState(false);
+        const [filtersOpen, setFiltersOpen] = useState(false);
+        const favoriteSet = useMemo(() => new Set(favorites), [favorites]);
+        const toggleFavorite = useCallback((id) => {
+          setFavorites((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+        }, []);
+
+        useEffect(() => { lsSet("distance", distance === Infinity ? null : distance); }, [distance]);
+        useEffect(() => { lsSet("program", program); }, [program]);
+        useEffect(() => { lsSet("userPos", userPos); }, [userPos]);
+        useEffect(() => { lsSet("attendance", attendance); }, [attendance]);
+        useEffect(() => { lsSet("timeOfDay", timeOfDay); }, [timeOfDay]);
+        useEffect(() => { lsSet("typeFilters", typeFilters); }, [typeFilters]);
+        useEffect(() => { lsSet("favorites", favorites); }, [favorites]);
+
+        const toggleType = useCallback((t) => {
+          setTypeFilters((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]);
+        }, []);
+
+        const activeFilterCount =
+          (program !== "All" ? 1 : 0) +
+          (distance !== Infinity ? 1 : 0) +
+          (attendance !== "All" ? 1 : 0) +
+          (timeOfDay !== "Any" ? 1 : 0) +
+          typeFilters.length +
+          (query.trim() ? 1 : 0);
+
+        const clearAllFilters = useCallback(() => {
+          setProgram("All");
+          setDistance(Infinity);
+          setAttendance("All");
+          setTimeOfDay("Any");
+          setTypeFilters([]);
+          setQuery("");
+        }, []);
+
+        const origin = userPos || TRENTON;
+
+        const requestLocation = useCallback(() => {
+          if (!("geolocation" in navigator)) { setGeoStatus("error"); return; }
+          setGeoStatus("requesting");
+          navigator.geolocation.getCurrentPosition(
+            (p) => { setUserPos({ lat: p.coords.latitude, lng: p.coords.longitude }); setGeoStatus("idle"); },
+            (err) => { setGeoStatus(err.code === err.PERMISSION_DENIED ? "denied" : "error"); },
+            { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 }
+          );
+        }, []);
+
+        const clearLocation = useCallback(() => { setUserPos(null); setGeoStatus("idle"); }, []);
+
+        // Fetch every source in parallel (distances are computed reactively below)
+        useEffect(() => {
+          let cancelled = false;
+          (async () => {
+            const { ok, meetings: m, sources } = await fetchAllSources();
+            if (cancelled) return;
+            if (!ok) { setFeedStatus({ aa: "error", sources: [] }); return; }
+            setMeetings(m);
+            setFeedStatus({ aa: "ok", sources });
+          })();
+          return () => { cancelled = true; };
+        }, []);
+
+        // Re-annotate distances whenever origin (user-set or default) changes
+        const meetingsWithDistance = useMemo(() => meetings.map((m) => ({
+          ...m,
+          distance: m.lat != null && m.lng != null ? haversine(origin, { lat: m.lat, lng: m.lng }) : null,
+        })), [meetings, origin]);
+
+        // Soonest upcoming meeting today (within next 4 hours, distance-eligible)
+        const nextUp = useMemo(() => {
+          const today = todayJsDay();
+          if (selectedDay !== today) return null;
+          const nowMin = minutesIntoToday();
+          const horizon = nowMin + 240;
+          const candidates = meetingsWithDistance
+            .filter((m) => m.day === today)
+            .filter((m) => distance === Infinity || m.distance == null || m.distance <= distance)
+            .map((m) => ({ m, t: parseTimeToMinutes(m.time) }))
+            .filter(({ t }) => t != null && t >= nowMin && t <= horizon)
+            .sort((a, b) => a.t - b.t);
+          if (!candidates.length) return null;
+          const { m, t } = candidates[0];
+          return { meeting: m, minsUntil: t - nowMin };
+        }, [meetingsWithDistance, selectedDay, distance]);
+
+        // Filter pipeline
+        const filtered = useMemo(() => {
+          let list = meetingsWithDistance.filter((m) => m.day === selectedDay);
+          if (starredOnly) list = list.filter((m) => favoriteSet.has(m.id));
+          if (program !== "All") list = list.filter((m) => m.program === program);
+          if (distance !== Infinity) list = list.filter((m) => m.distance == null || m.distance <= distance);
+          if (attendance !== "All") list = list.filter((m) => attendanceOf(m) === attendance);
+          if (timeOfDay !== "Any") list = list.filter((m) => timeBucket(parseTimeToMinutes(m.time)) === timeOfDay);
+          if (typeFilters.length) {
+            const wanted = typeFilters.map((t) => t.toLowerCase());
+            list = list.filter((m) => {
+              const have = (m.types || []).map((t) => String(t).toLowerCase());
+              return wanted.every((w) => have.some((h) => h.includes(w)));
+            });
+          }
+          if (query.trim()) {
+            const q = query.trim().toLowerCase();
+            list = list.filter((m) =>
+              [m.name, m.location, m.address, m.neighborhood, ...(m.types || [])]
+                .filter(Boolean).join(" ").toLowerCase().includes(q)
+            );
+          }
+          list.sort((a,b) => {
+            // Starred meetings sort to the top regardless of other criteria
+            const fa = favoriteSet.has(a.id) ? 0 : 1;
+            const fb = favoriteSet.has(b.id) ? 0 : 1;
+            if (fa !== fb) return fa - fb;
+            const ta = parseTimeToMinutes(a.time) ?? 1e9;
+            const tb = parseTimeToMinutes(b.time) ?? 1e9;
+            if (ta !== tb) return ta - tb;
+            const da = a.distance ?? 1e9;
+            const db = b.distance ?? 1e9;
+            return da - db;
+          });
+          return list;
+        }, [meetingsWithDistance, selectedDay, program, distance, attendance, timeOfDay, typeFilters, query, favoriteSet, starredOnly]);
+
+        // Should we show SMART/NA fallback cards in the list?
+        const showSmartFallback = (program === "All" || program === "SMART");
+        const showNaFallback = (program === "All" || program === "NA");
+
+        const onDayKey = (e) => {
+          if (e.key === "ArrowRight") setSelectedDay((d) => (d + 1) % 7);
+          if (e.key === "ArrowLeft") setSelectedDay((d) => (d + 6) % 7);
+        };
+
+        return (
+          <div className="min-h-full">
+            {/* Header — compact: title + filter button, day tabs, search, active-chips */}
+            <header className="sticky top-0 z-20 glass border-b border-ink-700">
+              <div className="max-w-3xl mx-auto px-4 pt-2 pb-2">
+                {/* Title row */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <h1 className="text-sm font-semibold text-white truncate">
+                      Recovery · <span className="text-ink-300 font-normal">{userPos ? "Your location" : "Trenton, MI"}</span>
+                    </h1>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setStarredOnly((v) => !v)}
+                      title="Show starred only"
+                      aria-label="Toggle starred only"
+                      className={`p-2 rounded-lg ${starredOnly ? "bg-smart-600/20 text-smart-500 ring-1 ring-smart-600/40" : "bg-ink-800 border border-ink-700 text-ink-300 hover:text-white"}`}
+                    >
+                      <IconStar filled={starredOnly} />
+                    </button>
+                    <button
+                      onClick={() => setFiltersOpen(true)}
+                      className={`px-3 py-2 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 ${activeFilterCount > 0 ? "bg-aa-600 text-white" : "bg-ink-800 border border-ink-700 text-ink-300 hover:text-white"}`}
+                    >
+                      <IconSliders />
+                      Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ""}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Day tabs */}
+                <div className="mt-2 -mx-4 px-4 overflow-x-auto scroll-x" onKeyDown={onDayKey} tabIndex={0}>
+                  <div className="flex gap-1.5 w-max">
+                    {DAY_NAMES.map((d, i) => {
+                      const isToday = i === todayJsDay();
+                      const isSel = i === selectedDay;
+                      return (
+                        <button
+                          key={d}
+                          onClick={() => setSelectedDay(i)}
+                          className={`relative px-3 py-1.5 rounded-lg text-xs font-medium border ${isSel ? "bg-white text-ink-950 border-white" : "bg-ink-800 text-ink-300 border-ink-700"}`}
+                        >
+                          {d}
+                          {isToday && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-smart-500 align-middle" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Search */}
+                <div className="mt-2 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"><IconSearch/></span>
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search meetings…"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-ink-800 border border-ink-700 text-sm text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-aa-600"
+                  />
+                </div>
+
+                {/* Active-filter chips strip (only when filters are set) */}
+                {activeFilterCount > 0 && (
+                  <div className="mt-2 -mx-4 px-4 overflow-x-auto scroll-x">
+                    <div className="flex gap-1.5 w-max items-center">
+                      {program !== "All" && <ActiveChip onRemove={() => setProgram("All")}>{program}</ActiveChip>}
+                      {distance !== Infinity && <ActiveChip onRemove={() => setDistance(Infinity)}>{distance} mi</ActiveChip>}
+                      {attendance !== "All" && <ActiveChip onRemove={() => setAttendance("All")}>{attendance}</ActiveChip>}
+                      {timeOfDay !== "Any" && <ActiveChip onRemove={() => setTimeOfDay("Any")}>{timeOfDay}</ActiveChip>}
+                      {typeFilters.map((t) => <ActiveChip key={t} onRemove={() => toggleType(t)}>{t}</ActiveChip>)}
+                      {userPos && <ActiveChip onRemove={clearLocation}>My location</ActiveChip>}
+                      {query.trim() && <ActiveChip onRemove={() => setQuery("")}>"{query.trim()}"</ActiveChip>}
+                      <button onClick={clearAllFilters} className="shrink-0 text-[11px] text-aa-500 hover:text-white px-2">Clear all</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </header>
+
+            {/* Filter sheet — slides up from bottom on mobile, centered modal on desktop */}
+            {filtersOpen && (
+              <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center">
+                <div className="absolute inset-0 bg-black/60" onClick={() => setFiltersOpen(false)} />
+                <div className="relative w-full sm:max-w-md bg-ink-900 rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
+                  <div className="sticky top-0 glass border-b border-ink-700 px-4 py-3 flex items-center justify-between z-10">
+                    <h2 className="text-base font-semibold text-white">Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ""}</h2>
+                    <div className="flex items-center gap-3">
+                      {activeFilterCount > 0 && (
+                        <button onClick={clearAllFilters} className="text-xs text-aa-500 hover:text-white">Clear all</button>
+                      )}
+                      <button onClick={() => setFiltersOpen(false)} className="px-3 py-1 rounded-lg bg-white text-ink-950 text-xs font-semibold">Done</button>
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-5">
+                    <FilterPills label="Program" options={["All","AA","NA","SMART"]} value={program} onChange={setProgram} />
+                    <FilterPills label="Distance" options={[5,10,20,Infinity]} value={distance} onChange={setDistance} format={(d) => d === Infinity ? "Any" : `${d} mi`} />
+                    <FilterPills label="Attendance" options={ATTENDANCE_OPTIONS} value={attendance} onChange={setAttendance} />
+                    <FilterPills label="Time of day" options={TIME_OPTIONS} value={timeOfDay} onChange={setTimeOfDay} />
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-ink-400 mb-2">Meeting type</div>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {TYPE_CHIPS.map((t) => {
+                          const on = typeFilters.includes(t);
+                          return (
+                            <button key={t} onClick={() => toggleType(t)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${on ? "bg-white text-ink-950 border-white" : "bg-ink-800 text-ink-300 border-ink-700"}`}>
+                              {t}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-ink-400 mb-2">Location</div>
+                      {userPos ? (
+                        <button onClick={clearLocation}
+                          className="w-full px-3 py-2 rounded-lg text-sm font-medium bg-aa-600/30 text-aa-500 ring-1 ring-aa-600/40 inline-flex items-center justify-center gap-2">
+                          <IconPin /> Using my location · tap to clear
+                        </button>
+                      ) : (
+                        <button onClick={requestLocation} disabled={geoStatus === "requesting"}
+                          className="w-full px-3 py-2 rounded-lg text-sm font-medium bg-ink-800 border border-ink-700 text-ink-300 hover:text-white disabled:opacity-60 inline-flex items-center justify-center gap-2">
+                          <IconPin />
+                          {geoStatus === "requesting" ? "Locating…"
+                            : geoStatus === "denied" ? "Permission denied"
+                            : geoStatus === "error" ? "Couldn't get location"
+                            : "Use my location"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* List */}
+            <main className="max-w-3xl mx-auto px-4 py-4 pb-24">
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="text-sm font-semibold text-ink-300">
+                  {DAY_FULL[selectedDay]} · {filtered.length} meeting{filtered.length === 1 ? "" : "s"}
+                </h2>
+                {feedStatus.aa === "loading" && <span className="text-[11px] text-ink-400">Loading {SOURCES.length} feeds…</span>}
+                {feedStatus.aa === "ok" && feedStatus.sources && (
+                  <span className="text-[11px] text-ink-400" title={feedStatus.sources.join(", ")}>
+                    {feedStatus.sources.length}/{SOURCES.length} sources
+                  </span>
+                )}
+                {feedStatus.aa === "error" && <span className="text-[11px] text-rose-400">All feeds unavailable</span>}
+              </div>
+
+              {/* Feed-down banner */}
+              {feedStatus.aa === "error" && (
+                <div className="mb-3 rounded-xl border border-rose-500/40 bg-rose-900/20 p-3 text-xs text-rose-200">
+                  Couldn't reach any AA meeting feeds (network may be offline).
+                  You can still use the official locators below.
+                </div>
+              )}
+
+              {/* Next up hero */}
+              {nextUp && (
+                <a
+                  href={mapsUrl(nextUp.meeting.address, nextUp.meeting.lat, nextUp.meeting.lng)}
+                  target="_blank" rel="noreferrer"
+                  className="block mb-4 rounded-2xl p-4 bg-gradient-to-br from-smart-600 to-aa-600 shadow-lg active:scale-[0.99] transition"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[11px] uppercase tracking-wider text-white/80 font-semibold">Next up · {humanizeMinutes(nextUp.minsUntil)}</div>
+                      <div className="text-base font-semibold text-white truncate">{nextUp.meeting.name}</div>
+                      <div className="text-xs text-white/80 truncate">
+                        {fmtTime(nextUp.meeting.time)}
+                        {nextUp.meeting.address ? ` · ${nextUp.meeting.address}` : ""}
+                        {nextUp.meeting.distance != null ? ` · ${nextUp.meeting.distance.toFixed(1)} mi` : ""}
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-1 text-white text-xs font-medium">
+                      <IconNav /> Go
+                    </div>
+                  </div>
+                </a>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {filtered.map((m) => (
+                  <MeetingCard
+                    key={m.id}
+                    m={m}
+                    isFavorite={favoriteSet.has(m.id)}
+                    onToggleFavorite={() => toggleFavorite(m.id)}
+                  />
+                ))}
+              </div>
+              {filtered.length === 0 && (
+                <div className="text-center text-sm text-ink-400 py-10">
+                  No meetings match the current filters.
+                  {activeFilterCount > 0 && (
+                    <> · <button onClick={clearAllFilters} className="text-aa-500 underline">Clear all</button></>
+                  )}
+                </div>
+              )}
+
+              {/* External platforms */}
+              <section className="mt-8">
+                <h2 className="text-sm font-semibold text-ink-300 mb-2">More programs &amp; locators</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {showSmartFallback && (
+                    <PlatformCard
+                      program="SMART"
+                      name="SMART Recovery"
+                      description={`Search SMART meetings near ${TRENTON.zip} on the official locator. CORS prevents direct fetch here.`}
+                      href={SMART_DEEPLINK}
+                      accent="border-l-smart-500"
+                    />
+                  )}
+                  {showNaFallback && (
+                    <PlatformCard
+                      program="NA"
+                      name="NA Meeting Search"
+                      description="Find Narcotics Anonymous meetings on the official NA.org locator."
+                      href={NA_DEEPLINK}
+                      accent="border-l-na-500"
+                    />
+                  )}
+                  <PlatformCard
+                    name="Recovery Dharma"
+                    description="Buddhist-inspired, peer-led recovery from addiction. In-person and online meetings worldwide."
+                    href={DHARMA_DEEPLINK}
+                    accent="border-l-violet-500"
+                  />
+                  <PlatformCard
+                    name="Refuge Recovery"
+                    description="Mindfulness-based recovery community rooted in Buddhist principles."
+                    href={REFUGE_DEEPLINK}
+                    accent="border-l-violet-500"
+                  />
+                  <PlatformCard
+                    name="Celebrate Recovery"
+                    description="Christ-centered recovery program with 35,000+ groups across churches worldwide."
+                    href={CELEBRATE_DEEPLINK}
+                    accent="border-l-rose-500"
+                  />
+                  <PlatformCard
+                    name="LifeRing Secular Recovery"
+                    description="Secular, abstinence-based peer-support — no higher power required."
+                    href={LIFERING_DEEPLINK}
+                    accent="border-l-teal-500"
+                  />
+                  <PlatformCard
+                    name="Women for Sobriety"
+                    description="Women-only recovery program focused on emotional and spiritual growth."
+                    href={WFS_DEEPLINK}
+                    accent="border-l-pink-500"
+                  />
+                  <PlatformCard
+                    name="Al-Anon"
+                    description="For family members and friends affected by someone else's drinking."
+                    href={ALANON_DEEPLINK}
+                    accent="border-l-sky-500"
+                  />
+                  <PlatformCard
+                    name="Passenger Compass"
+                    description="Peer support & recovery navigation — no public API, opens in a new tab."
+                    href={PASSENGER_LINK}
+                    accent="border-l-ink-500"
+                  />
+                  <PlatformCard
+                    name="Newform"
+                    description="Newform recovery community — opens in a new tab."
+                    href={NEWFORM_LINK}
+                    accent="border-l-ink-500"
+                  />
+                </div>
+              </section>
+
+              <footer className="mt-10 text-[11px] text-ink-400 text-center">
+                Data: aaferndale.org TSML feed · Distances from {TRENTON.city} ({TRENTON.lat}, {TRENTON.lng})
+              </footer>
+            </main>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
